@@ -22,6 +22,8 @@ main:
         
     mov ebx, arr                ; Move the base address of arr into ebx
     mov eax, [ebx + ecx * 4]    ; Move the element of arr at index i into eax
+
+    imul eax, [ebx + ecx * 4]
     
     mov rdi, fmt
     mov esi, eax

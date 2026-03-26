@@ -1,26 +1,41 @@
-; nasm -f elf32 main.asm && ld -m elf_i386 main.o
+; nasm -f elf64 main.asm && gcc -no-pie main.o
+
+default rel
 
 section     .data
-    arr              dd 5, 4, 3, 2, 1 
+    fmt              db "%d", 10, 0
+
+    arr              dd 2, 1, 6, 9, 5, 7, 10, 3, 4, 8 
     arr_len          equ ($ - arr) / 4
+
     i                dd 0
     j                dd 0
+
     temp             dd 0
     smallest_index   dd 0
     smallest_element dd 0
-    n                db 0x0a
+    
+    target           dd 10
+    result           dd -1
+    high             dd arr_len - 1
+    low              dd 0
+    mid              dd 0
+    
 
+    
+    
 
 section     .text
-    global      _start
+    global      main
+    extern      printf
 
-_start:
+main:
 
         outer_loop_begin:
             mov ebx, arr                                ; Move base address of arr into ebx
             
             mov ecx, [i]                                ; Move i, the outer loop index into ecx
-            cmp ecx, arr_len                          ; Compare i, stored in ecx, to the length of the array
+            cmp ecx, arr_len                            ; Compare i, stored in ecx, to the length of the array
             jge outer_loop_end                          ; If i is greater than or equal to the length of the array, then we should exit the outer loop by jumping to outer_loop_end
 
             mov eax, [ebx + ecx*4]
@@ -31,7 +46,7 @@ _start:
 
             inner_loop_begin:
                 mov ecx, [j]                            ; Move j, the inner loop index into ecx
-                cmp ecx, arr_len                      ; Compare j, stored in ecx, to the length of the array
+                cmp ecx, arr_len                        ; Compare j, stored in ecx, to the length of the array
                 jge inner_loop_end                      ; If j is greater than or equal to the length of the array, then we should exit the inner loop by jumping to inner_loop_end
      
 
@@ -73,50 +88,97 @@ _start:
 
         outer_loop_end:
             mov [i], 0
-            ; Leave this part out for now
-            ; Need a sorted array for binary search
-            ; jmp print_array_begin
+
+            jmp print_array_begin
+
+            print_sorted_array_end:
+                jmp binary_search_begin
 
 
-            print_array_begin:
-                mov ebx, arr            ; Move base address of arr into ebx
-
-                mov ecx, [i]            ; Move i, the index, to ecx
-                cmp ecx, arr_len      ; Check if i is less than the length of the array
-                jge print_array_end     ; If it is not, then end the loop, if it is then continue with the loop
-
-
-                mov eax, [ebx + ecx*4]  ; Move the value of the array at index [i], stored now in ecx, to eax
-
-                add eax, '0'            ; Add '0' to eax (only works for single digits)
-
-                mov [temp], eax         ; Move the value stored in eax to [temp]
-
-                mov edx, 1              ; Move the length of temp to edx
-                mov ecx, temp           ; Move temp to ecx
-                mov ebx, 1              ; Set the file descriptor for the program
-
-                mov eax, 4              ; Print syscall
-                int 0x80                ; Interrupt
-
-                call newline            ; Print a newline
-                
-                inc dword [i]           ; Increment i
-                jmp print_array_begin   ; Jump back to the start of the loop
+    binary_search_begin:
+    
+        mov ebx, arr                ; Move the base address of arr into ebx
+        mov ecx, [high]               ; Move high index into ecx
+        cmp [low], ecx              ; Compare low index to high index
+        jg binary_search_end        ; If low is greater than high, then exit by jumping to binary_search_end
 
 
+        mov eax, [high]               ; Move high index to eax
+        add eax, [low]              ; Add low to high
+        cdq                         ; Extend eax to edx:eax to prepare for division
 
-                print_array_end:
-                    mov eax, 1
-                    int 0x80
+        mov ecx, 2                  ; Move constant value 2 into ecx
+        idiv ecx                    ; Divide by 2
+        mov [mid], eax              ; Move the quotient into mid index
+
+
+        mov ecx, [mid]              ; Move mid index into ecx
+        mov eax, [ebx + ecx*4]      ; Move element at index mid into eax
+
+                                    ; The following three comparisons are made:
+        cmp [target], eax           
+        jg greater_than             ; target > arr[mid]                
+        jl less_than                ; target < arr[mid]
+        je found                    ; target == arr[mid]
+
+        greater_than:
+                                    ; low = mid + 1
+            inc dword [mid]         ; Increment mid by 1
+            mov eax, [mid]          ; Move mid into eax
+            mov [low], eax          ; Move value stored in eax into low
+            jmp binary_search_begin ; Jump to the beginning of the binary_search section
+
+        less_than:
+                                    ; high = mid - 1
+            dec dword [mid]         ; Decrement mid by 1
+            mov eax, [mid]          ; Move mid into eax
+            mov [high], eax         ; Move value stored in eax into high
+            jmp binary_search_begin ; Jump to the beginning of the binary_search section
+
+
+        found:
+                                    ; target found
+            mov eax, [mid]          ; Move mid into eax
+            mov [result], eax       ; Move the value stored in eax into result
+
+                                    ; Instructions needed for using C-language printf function
+            mov rdi, fmt            
+            mov esi, eax
+            xor rax, rax
+            call printf
+
+            jmp binary_search_end   ; Jump to the binary_search_end section since the target was found
+            
+        binary_search_end:
+            jmp end                 ; Jump to the end section to exit the program
 
 
 
 
-newline:
-    mov edx, 1
-    mov ecx, n
-    mov eax, 4
-    int 0x80
+    print_array_begin:
+        
+        mov ecx, [i]                ; Move the index, i, into ecx
+        cmp ecx, arr_len            ; Compare i to the size of arr
+        jge print_array_end         ; If i is greater than or equal to arr_len, then jump to the end and exit
+            
+        mov ebx, arr                ; Move the base address of arr into ebx
+        mov eax, [ebx + ecx * 4]    ; Move the element of arr at index i into eax
+        
+        mov rdi, fmt
+        mov esi, eax
+        xor rax, rax
 
-    ret
+        call printf
+
+        inc dword [i]
+        jmp print_array_begin
+
+    print_array_end:
+        jmp print_sorted_array_end
+
+end:
+    xor rax, rax
+    ret 
+
+
+
