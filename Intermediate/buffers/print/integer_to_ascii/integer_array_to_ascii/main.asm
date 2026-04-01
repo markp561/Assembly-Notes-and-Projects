@@ -21,9 +21,9 @@ _start:
     add esp, 12
 
                                 ; exit program
-    mov     eax, 1
-    xor     ebx, ebx
-    int     0x80
+    mov eax, 1
+    xor ebx, ebx
+    int 0x80
 
 
 ; parameters: array, start index, array length, buffer
