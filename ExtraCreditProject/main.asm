@@ -1,25 +1,29 @@
 ; nasm -f elf32 main.asm && ld -m elf_i386 main.o
 
 section     .data
-    msg1         db "Enter the array size: "
-    msg1_len     equ ($ - msg1)
+    msg1            db "Enter the array size: "
+    msg1_len        equ ($ - msg1)
 
-    msg2         db "Enter the contents of the array: ", 0x0A
-    msg2_len     equ ($ - msg2)
+    msg2            db "Enter the contents of the array: ", 0x0A
+    msg2_len        equ ($ - msg2)
+
+    msg3            db "Enter the search target: "
+    msg3_len        equ ($ - msg3)
+
+    success_msg     db "The search target was found at index: "
+    success_msg_len equ ($ - success_msg)
+
+    failure_msg     db "The search target was not found", 0x0A
+    failure_msg_len equ ($ - failure_msg)
     
-    exit_msg     db "Program Ended.", 0x0A
-    exit_msg_len equ ($ - exit_msg)
+    exit_msg        db "Program Ended", 0x0A
+    exit_msg_len    equ ($ - exit_msg)
 
-    newline     db 0x0A
+    newline         db 0x0A
 
-    arr         dd 33, -44, 11, 55, -2
-    arr_len     dd 0
+    arr             dd 33, -44, 11, 55, -2
+    arr_len         dd 0
 
-    q           dd 0
-    i           dd 0
-    j           dd 0
-    
-    target      dd 33
 
 section     .bss
     buffer      resb 16
@@ -73,6 +77,7 @@ _start:
     mov edx, 1
     int 0x80
     
+
     ; print the sorted array
     mov edi, arr
     mov esi, [arr_len]
@@ -86,31 +91,77 @@ _start:
     mov ebx, 1
     mov edx, 1
     int 0x80
+    
+    ; print msg3, prompting user to enter search target
+    mov ecx, msg3
+    mov eax, 4
+    mov ebx, 1
+    mov edx, msg3_len
+    int 0x80
+    
+    ; take user input for search target
+    mov eax, 3
+    mov ebx, 0
+    mov ecx, buffer
+    mov edx, 16
+    int 0x80
+
+    ; convert user input from ascii to integer
+    xor eax, eax
+    mov edi, buffer
+    call atoi
 
     ; the binary_search function takes three arguments: pointer to base address of array, the length of the array, and a pointer to the target
     mov edi, arr
     mov esi, [arr_len]
     dec esi
-    mov ebx, [target]
+    mov ebx, eax
     call binary_search
     
-    ; convert the output of binary search to ascii to be printed
+    ; if the result is greater than -1 then the target was found and we print the respective success message
+    ; if the result is -1 then the target wasn't found and we print the respective failure message
+    cmp eax, -1
+    jg success
+    je failure
+
+    
+
+success:
+    ; convert the result of binary search to ascii to be printed
     mov edi, buffer
     call itoa
-    
-    ; print the output
+
+    push eax                    ; preserve the result of binary search
+    push edx                    ; preserve the length of the result
+
+    ; print "The search target was found at index: "
+    mov ecx, success_msg
+    mov eax, 4
+    mov ebx, 1
+    mov edx, success_msg_len
+    int 0x80
+
+    pop edx                     ; restore edx so we can use the length of the result
+    pop eax                     ; restore eax so we can use the result of binary search
+
+    ; print the result
     mov ecx, eax
     mov eax, 4
     mov ebx, 1
     int 0x80
 
-    ; print a newline
-    mov ecx, newline
+    jmp exit
+failure:
+    ; print the message corresponding to the search target not being found in the array
+    mov ecx, failure_msg
     mov eax, 4
     mov ebx, 1
-    mov edx, 1
+    mov edx, failure_msg_len
     int 0x80
-    
+
+    jmp exit
+exit:
+    ; print the message "Program Ended"
     mov ecx, exit_msg
     mov eax, 4
     mov ebx, 1
@@ -121,6 +172,8 @@ _start:
     mov eax, 1
     xor ebx, ebx
     int 0x80
+
+
 
 
 ; parameters: array, start index, array length, buffer
@@ -161,6 +214,18 @@ print_array:
 
 
 atoi:
+    xor eax, eax
+    xor ebx, ebx
+
+    mov dl, [edi]
+    cmp dl, '-'
+    jne .loop
+
+    mov bl, 1
+    inc edi
+    jmp .loop
+
+.loop:
     movzx edx, byte [edi]
     cmp dl, 0x0A
     je .end
@@ -168,10 +233,14 @@ atoi:
     imul eax, 10
     sub edx, '0'
     add eax, edx
-    inc edi
 
-    jmp atoi
+    inc edi
+    jmp .loop
 .end:
+    cmp bl, 1
+    jne .done
+    neg eax
+.done:
     ret
 
 
@@ -223,61 +292,57 @@ itoa:
 
 
 partition:
+    mov ecx, esi                       ; move start index to j
+    mov ebx, esi                       ; move start index to i
+    dec ebx
 
-    mov [i], esi                       ; move current value of esi (start) into i
-    dec dword [i]                      ; decrement i
-    
-    mov [j], esi                       ; move start into j
-    cmp [j], edx                       ; compare j to end
-    jl .loop                           ; if j smaller than end enter loop
+    cmp ecx, edx                       ; compare j to end index
+    jl .loop                           ; if j smaller than end, enter loop
     jge .end                           ; else go to end of loop
    
 .loop:   
-    mov ecx, [j]                       ; move j into ecx
     mov eax, [edi + ecx*4]             ; move element of arr at index j into eax
     cmp eax, [edi + edx*4]             ; compare element of arr at index j to element of arr at index end
     jg .continue                       ; if arr[j] > arr[end] do nothing, go to next iteration
 
-    inc dword [i]                      ; else i++ and swap arr[i] with arr[j]
+    inc ebx                            ; else i++ and swap arr[i] with arr[j]
     
+    push esi                           ; push esi to save current value and free it for use
+    mov esi, ebx                       ; move i into esi
 
-    push esi                           ; push esi so we can use it
-    mov esi, [i]                       ; move i into esi
+    push ebx                           ; push ebx to save current value and free it for use
 
-                                       ; swap the ith element with the jth element
-    mov eax, [edi + esi*4]             ; move ith element of arr into eax
-                                       ; xor swapping method
-    xor eax, [edi + ecx*4]             ; xor eax with the jth element
-    xor [edi + ecx*4], eax             ; xor the jth element with eax
-    xor eax, [edi + ecx*4]             ; xor eax with the jth element again
+    ; swap ith element with jth element
+    mov eax, [edi + esi*4]             ; ith element
+    mov ebx, [edi + ecx*4]             ; jth element
+    mov [edi + ecx*4], eax             ; move ith element into jth index
+    mov [edi + esi*4], ebx             ; move jth element into ith index
+     
+    pop ebx                            ; pop ebx to restore its value
+    pop esi                            ; pop esi to restore its value 
 
-    mov [edi + esi*4], eax             ; move the value of eax into the ith index
-
-    pop esi                            ; pop esi to get back its value
-
-    jmp .continue            
+    jmp .continue                      
 
 .continue:
-        inc dword [j]                  ; increment j to access the next element
-        cmp [j], edx                   ; compare j to the end index
+        inc ecx                        ; increment j to access the next element
+        cmp ecx, edx                   ; compare j to the end index
         jl .loop                       ; if j is smaller than end, jump to start of loop for the next iteration
 
 .end:
-        mov ecx, [i]                   ; move i into ecx
+        mov ecx, ebx                   ; move i into ecx
         add ecx, 1                     ; add 1 to ecx
         
-    
-                                       ; swapping i+1 element with end element
-        mov eax, [edi + ecx*4]         ; move element of arr at index i into eax
-                                       ; same xor swap as before but with edx register that contains the end index
-        xor eax, [edi + edx*4]  
-        xor [edi + edx*4], eax 
-        xor eax, [edi + edx*4]
+        push ebx                       ; push ebx to save its current value and free it for use
 
-        mov [edi + ecx*4], eax         ; move eax into i+1 index of arr
+        ; swap i+1 element with end element 
+        mov eax, [edi + ecx*4]
+        mov ebx, [edi + edx*4]
+        mov [edi + ecx*4], ebx
+        mov [edi + edx*4], eax
 
+        pop ebx                         ; pop ebx to restore its value
 
-        mov eax, [i]                   ; move i into eax
+        mov eax, ebx                   ; move i into eax
         add eax, 1                     ; add 1 to eax
         ret                            ; return (eax will be returned)
 
